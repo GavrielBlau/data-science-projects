@@ -1,0 +1,201 @@
+---
+title: "term project part 3"
+author: "Blau, Gavriel"
+date: "2024-08-05"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(readr)  
+library(readxl) 
+library(ggplot2)
+library(dplyr)
+library(purrr)
+library(tidyr)
+```
+```{r}
+
+gdp_data <- read_csv("C:/Users/chezk/Downloads/Data-Table 1.csv")
+green_data <- read_excel("C:/Users/chezk/Downloads/SDG_11-7-1.xlsx")
+health_data <- read_csv("C:/Users/chezk/Downloads/PLACES__Local_Data_for_Better_Health__County_Data_2023_release_20240804.csv")
+```
+```{r}
+head(gdp_data)
+head(green_data)
+head(health_data)
+
+```
+```{r}
+sum(is.na(gdp_data))
+sum(is.na(green_data))
+sum(is.na(health_data))
+
+
+# Remove rows with missing values
+gdp_data <- na.omit(gdp_data)
+green_data <- na.omit(green_data)
+# health_data <- na.omit(health_data)
+
+```
+```{r}
+sum(duplicated(gdp_data))
+sum(duplicated(green_data))
+sum(duplicated(health_data))
+
+
+# Remove duplicate rows
+gdp_data <- gdp_data[!duplicated(gdp_data), ]
+green_data <- green_data[!duplicated(green_data), ]
+# health_data <- health_data[!duplicated(health_data), ]
+
+```
+```{r}
+head(gdp_data)
+head(green_data)
+head(health_data)
+
+```
+```{r}
+# Display a summary of each cleaned dataset
+summary(gdp_data)
+summary(green_data)
+# summary(health_data)
+
+```
+```{r}
+gdp_data <- gdp_data %>%
+  separate(City, into = c('city_name', 'state'), sep = ', ')
+
+green_data_2020 <- green_data %>%
+  filter(`Data Reference Year` == 2020)
+health_data_2020 <- health_data %>%
+  filter(Year == 2020)
+```
+
+```{r}
+green_data_2020_ <- green_data_2020 %>%
+  filter(`Country or Territory Name` == "United States of America")
+
+```
+```{r}
+gdp_data <- gdp_data %>% rename(location = city_name)
+green_data_2020 <- green_data_2020 %>% rename(location = `City Name`)
+health_data_2020 <- health_data_2020 %>% rename(location = LocationName)
+```
+```{r}
+
+green_data_2020 <- green_data_2020 %>% rename(urban_population_access = `Average share of urban population with convenient access to open public spaces (%) [b]`)
+```
+
+```{r}
+common_locations <- reduce(list(gdp_data, health_data_2020), function(x, y) {
+  inner_join(x, y, by = "location")
+})
+```
+```{r}
+economy_and_health <- common_locations %>%
+  select(location, Gdp, Data_Value)
+
+View(economy_and_health)
+
+```
+```{r}
+summary_stats <- common_locations %>%
+  summarize(mean_col1 = mean(Gdp, na.rm = TRUE),
+            mean_col2 = mean(Data_Value, na.rm = TRUE),
+  )
+
+print(summary_stats)
+
+```
+```{r}
+common_locations2 <- reduce(list(green_data_2020, health_data_2020), function(x, y) {
+  inner_join(x, y, by = "location")
+})
+
+```
+
+```{r}
+green_health <- common_locations2 %>%
+  select(location, urban_population_access, Data_Value)
+
+View(green_health)
+unique_values <- unique(green_health$location)
+print(unique_values)
+```
+```{r}
+common_locations3 <- reduce(list(green_data_2020, gdp_data), function(x, y) {
+  inner_join(x, y, by = "location")
+})
+
+```
+```{r}
+economy_green <- common_locations3 %>%
+  select(location, urban_population_access, Gdp)
+View(economy_green)
+```
+```{r}
+ggplot(economy_green, aes(x = Gdp, y = urban_population_access)) +
+  geom_point() +
+  labs(title = "Gdp vs green",
+       x = "Gdp",
+       y = "green space")
+
+```
+```{r}
+ggplot(economy_and_health, aes(x = Gdp, y = Data_Value)) +
+  geom_point() +
+  labs(title = "Gdp vs Health",
+       x = "Gdp",
+       y = "average health")
+```
+```{r}
+ggplot(green_health, aes(x = urban_population_access, y = Data_Value)) +
+  geom_point(alpha = 0.6) +  # Adds some transparency to the points
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Adds a trend line
+  labs(
+    title = "Green Spaces vs Health",
+    x = "Average Share of Urban Population with Access to Open Public Spaces (%)",
+    y = "average health"
+  ) +
+  theme_minimal() 
+```
+```{r}
+# The trend line is nearly horizontal, indicating that there might be little to
+# no linear relationship between the "Access to Open Public Spaces" and the 
+# "Data Value".
+# The slope of the line is close to zero, suggesting that changes in access to
+# green spaces do not strongly correlate with changes in the data values in your
+# dataset. There is variability in the "Data Value" across all access levels,
+# but it does not appear to follow a clear trend that increases or decreases 
+# consistently with access to green spaces
+```
+```{r}
+ggplot(green_health, aes(x = urban_population_access, y = Data_Value)) +
+  geom_point(alpha = 0.6) +  # Adds some transparency to the points
+  geom_smooth(method = "loess", se = FALSE, color = "red") +  # Adds a non-linear trend line
+  labs(
+    title = "Green Space vs Health",
+    x = "Average Share of Urban Population with Access to Open Public Spaces (%)",
+    y = "average health"
+  ) +
+  theme_minimal()
+```
+```{r}
+polynomial_model <- lm(Data_Value ~ poly(urban_population_access, 2), data = green_health)
+summary(polynomial_model)
+```
+```{r}
+ggplot(green_health, aes(x = urban_population_access, y = Data_Value)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = FALSE, color = "blue") +
+  labs(title = "Green Space vs Average health",
+       x = "Average Share of Urban Population with Access to Open Public Spaces (%)",
+       y = "average health")
+```
+
